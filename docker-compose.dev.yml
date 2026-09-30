@@ -1,0 +1,115 @@
+# =============================================================================
+# HelpDeskCore - desarrollo (override)
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Cambios frente a produccion:
+#   - El codigo del host se monta en /var/www/html (no hace falta reconstruir)
+#   - Vite corre en un contenedor aparte con hot reload en el puerto 5173
+#   - APP_ENV=local, APP_DEBUG=true y caches desactivadas
+#   - `vendor` y `node_modules` viven en volumenes para no tocar el host
+#
+# El servicio `install` ejecuta `composer install` (con dependencias de
+# desarrollo) antes de que arranque la aplicacion, y `vite` hace su
+# `npm install` al levantarse. Asi un `up` a secas deja todo listo.
+# =============================================================================
+
+name: helpdeskcore
+
+services:
+  # --- Dependencias PHP de desarrollo --------------------------------------
+  # La imagen de produccion se construye con `composer install --no-dev`, asi
+  # que en dev hay que instalar laravel/boost, pint y phpunit en el volumen.
+  install:
+    image: composer:2.8
+    container_name: helpdesk_install
+    working_dir: /var/www/html
+    environment:
+      COMPOSER_ALLOW_SUPERUSER: 1
+    volumes:
+      - .:/var/www/html
+      - dev_vendor:/var/www/html/vendor
+    # ext-gd no existe en la imagen de composer (la imagen final si la tiene).
+    command: >
+      composer install --no-interaction --no-progress --ignore-platform-req=ext-gd
+
+  app:
+    depends_on:
+      install:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      LOG_LEVEL: debug
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      - .:/var/www/html
+      - dev_vendor:/var/www/html/vendor
+      - dev_storage:/var/www/html/storage
+      - dev_database:/data
+
+  queue:
+    depends_on:
+      install:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      RUN_MIGRATIONS: "false"
+      RUN_CACHE: "false"
+    volumes:
+      - .:/var/www/html
+      - dev_vendor:/var/www/html/vendor
+      - dev_storage:/var/www/html/storage
+      - dev_database:/data
+
+  scheduler:
+    depends_on:
+      install:
+        condition: service_completed_successfully
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8000
+      RUN_MIGRATIONS: "false"
+      RUN_CACHE: "false"
+    volumes:
+      - .:/var/www/html
+      - dev_vendor:/var/www/html/vendor
+      - dev_storage:/var/www/html/storage
+      - dev_database:/data
+
+  # --- Vite dev server con hot reload ---------------------------------------
+  vite:
+    image: node:22-alpine
+    container_name: helpdesk_vite
+    working_dir: /var/www/html
+    restart: unless-stopped
+    # El puerto debe exponerse: el navegador (no el contenedor) consume los assets.
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    environment:
+      # URL que el navegador usara para los assets (se escribe en public/hot).
+      # Cambiala si en tu maquina el puerto 5173 esta ocupado.
+      VITE_DEV_ORIGIN: ${VITE_DEV_ORIGIN:-http://localhost:5173}
+    volumes:
+      - .:/var/www/html
+      - dev_node_modules:/var/www/html/node_modules
+    # `npm ci` y no `npm install`: npm install reescribiria package-lock.json y
+    # como el contenedor es Alpine (musl) eliminaria las variantes glibc del
+    # lock, rompiendo la instalacion en el resto de plataformas. Solo se
+    # instala la primera vez; despues se levanta Vite directamente.
+    # Ojo: se comprueba el binario y no el directorio, porque un volumen de
+    # Docker recien creado deja node_modules existiendo pero vacio.
+    command: >
+      sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --no-progress; fi &&
+      npm run dev -- --host 0.0.0.0 --port 5173"
+
+volumes:
+  dev_vendor:
+  dev_storage:
+  dev_database:
+  dev_node_modules:

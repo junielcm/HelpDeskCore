@@ -25,6 +25,10 @@ export default defineConfig({
         },
     },
     server: {
+        // En Docker el dev server corre en otro contenedor, asi que la URL que
+        // se publica en public/hot debe ser la que ve el navegador, no la del
+        // contenedor. Sin esta variable el comportamiento es el de siempre.
+        origin: process.env.VITE_DEV_ORIGIN || undefined,
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },

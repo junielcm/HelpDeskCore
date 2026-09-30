@@ -1,0 +1,44 @@
+# Contexto de build: solo lo necesario para construir la imagen.
+# Todo lo que se regenera dentro del contenedor queda fuera.
+
+# --- Control de versiones ---------------------------------------------------
+.git
+.gitignore
+.github
+
+# --- Dependencias (se restauran en la imagen) -------------------------------
+node_modules
+vendor
+
+# --- Entorno local (nunca debe entrar en la imagen) --------------------------
+.env
+.env.backup
+.env.production
+*.sqlite
+*.sqlite-journal
+
+# --- Artefactos generados en el host -----------------------------------------
+public/build
+public/hot
+public/storage
+public/fonts-manifest.dev.json
+
+# --- Cache de Laravel --------------------------------------------------------
+bootstrap/cache/*.php
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+
+# --- Tests / calidad ---------------------------------------------------------
+.phpunit.result.cache
+.phpunit.cache
+
+# --- Editores y sistema operativo --------------------------------------------
+.idea
+.vscode
+.zed
+.nova
+.DS_Store
+Thumbs.db
+*.log

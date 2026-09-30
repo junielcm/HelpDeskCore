@@ -1,0 +1,85 @@
+# =============================================================================
+# HelpDeskCore - produccion
+#
+#   docker compose up -d --build
+#   docker compose exec app php artisan db:seed      # datos iniciales
+#   docker compose logs -f app
+#
+# Para desarrollo con hot reload de Vue:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# =============================================================================
+
+name: helpdeskcore
+
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: docker/app/Dockerfile
+  image: helpdeskcore:latest
+  restart: unless-stopped
+  # Valores fijos a proposito: Docker Compose tambien lee el fichero .env de
+  # Laravel para resolver ${...}, asi que usar ${APP_ENV:-production} haria que
+  # un .env local (APP_ENV=local, APP_DEBUG=true) acabase mandando sobre el
+  # contenedor. Los unicos valores parametrizados son los propios de Docker y
+  # no colisionan con ninguna clave del .env de Laravel.
+  environment: &app-env
+    APP_ENV: production
+    APP_DEBUG: "false"
+    APP_URL: ${APP_URL:-http://localhost:8000}
+    APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+    DB_CONNECTION: sqlite
+    DB_DATABASE: /data/database.sqlite
+    SESSION_DRIVER: database
+    CACHE_STORE: database
+    QUEUE_CONNECTION: database
+    FILESYSTEM_DISK: local
+    LOG_CHANNEL: stack
+    LOG_LEVEL: info
+
+services:
+  # --- Aplicacion web (nginx + php-fpm) -------------------------------------
+  app:
+    <<: *app-base
+    container_name: helpdesk_app
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      # SQLite persistente: sobrevive a `down` y a la reconstruccion de imagen
+      - app_database:/data
+      # Adjuntos de tickets, logs y vistas compiladas
+      - app_storage:/var/www/html/storage
+
+  # --- Worker de colas (notificaciones, exportaciones, SLA) -----------------
+  queue:
+    <<: *app-base
+    container_name: helpdesk_queue
+    command: php artisan queue:work --sleep=3 --tries=3 --timeout=120
+    environment:
+      <<: *app-env
+      # Solo `app` migra y construye caches; aqui solo se ejecuta el worker.
+      RUN_MIGRATIONS: "false"
+      RUN_CACHE: "false"
+    volumes:
+      - app_database:/data
+      - app_storage:/var/www/html/storage
+    healthcheck:
+      disable: true
+
+  # --- Planificador (tickets:check-slas cada hora) -------------------------
+  scheduler:
+    <<: *app-base
+    container_name: helpdesk_scheduler
+    command: php artisan schedule:work
+    environment:
+      <<: *app-env
+      RUN_MIGRATIONS: "false"
+      RUN_CACHE: "false"
+    volumes:
+      - app_database:/data
+      - app_storage:/var/www/html/storage
+    healthcheck:
+      disable: true
+
+volumes:
+  app_database:
+  app_storage:
