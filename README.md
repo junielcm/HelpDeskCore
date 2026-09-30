@@ -23,20 +23,45 @@ Abre <http://localhost:8000>.
 El contenedor se encarga solo de generar `.env`, la `APP_KEY`, crear la base de datos SQLite y
 ejecutar las migraciones. No hay ningún paso previo.
 
-Para cargar datos de demostración (usuarios de ejemplo en los cuatro roles):
+---
+
+## Cuentas de prueba
+
+Para cargar los usuarios de demostración de los cuatro roles:
 
 ```bash
 docker compose exec app php artisan db:seed
 ```
 
-Las cuentas de demostración usan la contraseña `123456`:
+**Todas las cuentas usan la contraseña `123456`** (definida en
+`database/seeders/UsersSeeder.php`).
 
-| Rol        | Email                            |
-| ---------- | -------------------------------- |
-| admin      | `admin@helpdesk.com`             |
-| supervisor | `supervisor@helpdesk.com`        |
-| agente     | `agente.luciana@helpdesk.com`    |
-| cliente    | `cliente.andrea@helpdesk.com`    |
+| Rol        | Correo                          | Contraseña |
+| ---------- | ------------------------------- | ---------- |
+| admin      | `admin@helpdesk.com`            | `123456`   |
+| supervisor | `supervisor@helpdesk.com`       | `123456`   |
+| agent      | `agente.luciana@helpdesk.com`   | `123456`   |
+| agent      | `agente.miguel@helpdesk.com`    | `123456`   |
+| client     | `cliente.andrea@helpdesk.com`   | `123456`   |
+| client     | `cliente.bruno@helpdesk.com`    | `123456`   |
+
+El login se hace en `/login` y la SPA guarda un token Sanctum, así que conviene abrir una
+ventana de incógnito por rol para comparar las vistas sin que interfiera la sesión anterior.
+
+### Qué ve cada rol
+
+Los permisos se aplican en el API, no solo ocultando botones en la interfaz.
+
+| Rol        | Alcance                                                                        |
+| ---------- | ------------------------------------------------------------------------------ |
+| `client`   | Solo los tickets que él mismo creó. No ve los comentarios internos. Puede calificar la atención. |
+| `agent`    | Los tickets de su departamento o los que tiene asignados. Ve comentarios internos. No accede a métricas, reportes, reglas de SLA ni administración. |
+| `supervisor` | Acceso a todos los tickets. Métricas del panel, reportes (incluida la exportación a Excel), reglas de SLA y gestión de usuarios. |
+| `admin`    | Todo lo de `supervisor` y además la gestión de departamentos, que es exclusiva de `admin`. |
+
+Para comprobar los contrastes entre roles, entra como `cliente.andrea` (solo ve lo suyo), luego
+como `agente.luciana` (además ve los internos del departamento *Soporte Técnico*) y finalmente
+como `admin` (todo el sistema).
 
 ---
 
